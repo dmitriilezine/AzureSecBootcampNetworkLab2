@@ -2,5 +2,22 @@
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
+    "alias": {
+      "value": "youralias"
+    },
+    "adminpassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/7fjfjfjfe-d83e-46f5-b95c-17kgkfjdudf1/resourceGroups/d-keyvault-rg/providers/Microsoft.KeyVault/vaults/d-akeyvault"
+        },
+        "secretName": "adminpassword"
+      }
+    },
+    "omsworkspaceid": {
+      "value": "asdasdasd-mlmlasdlhkdjwetsdadddsdmklml"
+    },
+    "omsworkspacekey": {
+      "value": "2888123-dasdk12304-mkhkhkmwamk19904"
+    }
   }
 }

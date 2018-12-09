@@ -1,8 +1,516 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
-  "parameters": {},
-  "variables": {},
-  "resources": [],
-  "outputs": {}
+  "parameters": {
+    "alias": {
+      "type": "string",
+      "metadata": {
+        "description": "Enter Your Microsoft Alias"
+      }
+    },
+    "adminusername": {
+      "type": "string",
+      "defaultValue": "azure-admin",
+      "metadata": {
+        "description": "Enter Username for Virtual Machines"
+      }
+    },
+    "adminpassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Enter Admin Passwords for Virtual Machines"
+      }
+    },
+    "omsworkspaceid": {
+      "type": "string",
+      "metadata": {
+        "description": "Enter OMS Client ID"
+      }
+    },
+    "omsworkspacekey": {
+      "type": "string",
+      "metadata": {
+        "description": "Enter OMS Workspace Primary Shared Key"
+      }
+    }
+
+  },
+
+  "variables": {
+
+    "vNet1": {
+      "name": "[Concat(parameters('alias'),'-hub-vnet1')]",
+      "addressSpacePrefix": "10.10.0.0/16",
+      "subnet1Name": "AzureFirewallSubnet",
+      "subnet1Prefix": "10.10.1.0/24",
+      "subnet2Name": "DMZ",
+      "subnet2Prefix": "10.10.2.0/24",
+      "subnet3Name": "Management",
+      "subnet3Prefix": "10.10.3.0/24",
+      "gatewaySubnetPrefix": "10.10.4.0/27",
+      "gatewayName": "[concat(parameters('alias'),'-vnet1-GW')]",
+      "gatewayPublicIPName": "[concat(parameters('alias'),'-vnet1-GWIP')]",
+      "asn": 65031,
+      "location": "East US"
+    },
+
+
+
+    "vNet2": {
+      "name": "[Concat(parameters('alias'),'-spoke-vnet2')]",
+      "env": "DR",
+      "addressSpacePrefix": "10.20.0.0/16",
+      "subnet1Name": "DMZ",
+      "subnet1Prefix": "10.20.1.0/24",
+      "subnet2Name": "Web",
+      "subnet2Prefix": "10.20.2.0/24",
+      "subnet3Name": "App",
+      "subnet3Prefix": "10.20.3.0/24",
+      "subnet4Name": "Data",
+      "subnet4Prefix": "10.20.4.0/24",
+      "subnet5Name": "Identity",
+      "subnet5Prefix": "10.20.5.0/24",
+      "subnet6Name": "Management",
+      "subnet6Prefix": "10.20.6.0/24",
+      "gatewaySubnetPrefix": "10.20.7.0/27",
+      "gatewayName": "[concat(parameters('alias'),'-vnet2-GW')]",
+      "gatewayPublicIPName": "[concat(parameters('alias'),'-vnet2-GWIP')]",
+      "asn": 65032,
+      "location": "East US"
+    },
+
+    "vNet3": {
+      "name": "[Concat(parameters('alias'),'-spoke-vnet3')]",
+      "env": "TEST",
+      "addressSpacePrefix": "10.30.0.0/16",
+      "subnet1Name": "DMZ",
+      "subnet1Prefix": "10.30.1.0/24",
+      "subnet2Name": "Web",
+      "subnet2Prefix": "10.30.2.0/24",
+      "subnet3Name": "App",
+      "subnet3Prefix": "10.30.3.0/24",
+      "subnet4Name": "Data",
+      "subnet4Prefix": "10.30.4.0/24",
+      "subnet5Name": "Identity",
+      "subnet5Prefix": "10.30.5.0/24",
+      "subnet6Name": "Management",
+      "subnet6Prefix": "10.30.6.0/24",
+      "gatewaySubnetPrefix": "10.30.7.0/27",
+      "gatewayName": "[concat(parameters('alias'),'-vnet3-GW')]",
+      "gatewayPublicIPName": "[concat(parameters('alias'),'-vnet3-GWIP')]",
+      "asn": 65033,
+      "location": "East US"
+    },
+
+    "webvm": {
+      "name": "[concat(parameters('alias'),'-web0')]",
+      "size": "Standard_D11_v2",
+      "location": "East US",
+      "storagetype": "Standard_LRS",
+      "avname": "[concat(parameters('alias'),'-webavset')]",
+      "storageaccount": "[concat(parameters('alias'),take(uniqueString(resourceGroup().id),4),'sta')]",
+      "iparray": [ "10.20.2.4", "10.20.2.5" ],
+      "imagePublisher": "MicrosoftWindowsServer",
+      "imageOffer": "WindowsServer",
+      "imagesku": "2016-Datacenter",
+      "datadisk1size": "100",
+      "dscurl": "https://praroimages.blob.core.windows.net/windows-powershell-dsc/webserverdsc.ps1.zip",
+      "dscfunction": "webserverdsc.ps1\\FourthCoffee"
+    },
+
+    "vnet1rg": "[concat(parameters('alias'),'-network-rg')]",
+    "vnet2name": "[Concat(parameters('alias'),'-spoke-vnet2')]",
+
+    "SubnetwebRef": "[concat(variables('vnet2Ref'),'/subnets/','Web')]",
+
+
+
+    "vnet1Ref": "[resourceId(variables('vNet1rg'),'Microsoft.Network/virtualNetworks',variables('vNet1').name)]",
+    "gateway1SubnetRef": "[concat(variables('vnet1Ref'),'/subnets/','GatewaySubnet')]",
+    "vnet2Ref": "[resourceId('Microsoft.Network/virtualNetworks',variables('vNet2').name)]",
+    "gateway2SubnetRef": "[concat(variables('vnet2Ref'),'/subnets/','GatewaySubnet')]",
+    "gatewaySku": "Standard",
+    "sharedkey": "abc123",
+    "jumpboxrg": "[concat(parameters('alias'),'-jumpbox-rg')]",
+    "clientRootCertData": "MIIC5zCCAc+gAwIBAgIQY8vUyqs7xqdF2n6dIIXoMDANBgkqhkiG9w0BAQsFADAWMRQwEgYDVQQDDAtQMlNSb290Q2VydDAeFw0xNzA2MTExNjI3MjhaFw0xODA2MTExNjQ3MjhaMBYxFDASBgNVBAMMC1AyU1Jvb3RDZXJ0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApYsMmCcc1LXOTttt78wPjLYdktroNzwtT0sggyoCobaDcnHvx0JTtO8qPaKL9lnZOFognvZh43AdI+D/6v2x2jQ6NvzQOEQeH/CaAGFqOq6g9182irk9P/AxMoBz11Sq3xw/Ftjt4ltOzjdPOgf7+gzjDFrKVTAwVwJLjo3M6oKo4UTgamhhmzcj7nsTdCKhJtzR6qd+bUaMrupy0JpY9HpfcUKfRsoMJyrlznMYnEPYd59mBpvvFeECH0mhlyRTFHIVtg/d6QOroY6f8rG02q7VYSeIiqKlKJeN9GhPOGJSQvbFSA7OJN0DI6xy2+EhaVwJWx2oQ8tq+cxjUnSBYwIDAQABozEwLzAOBgNVHQ8BAf8EBAMCAgQwHQYDVR0OBBYEFGJiMSQO7ViEhXMpwRRIfiKpU108MA0GCSqGSIb3DQEBCwUAA4IBAQAXIoZbpIjGMlgFUwA74Uf/csDxTg8Ko2d0csgXXriMiMo3jYRgEZaXvExZM8hHX6HnbEtbvoqIHc15xb+DJmzXRD1fa387OLvooDhxH04KalomMk0KiyD6xRodynW+pCVpdEyC9QIOOYwTHHbK2+Ksci982ARu9GauV7Hwz9n9O6YbQ1Y8s7NeMhJMe0kVBs+u5BcyOBgfsKvA/gosf08BZIMGTO7uCWfBnJcNqFCErZ6XuMSuDtGdvl/ajkCptXG1ofU5lRNwCKosYiRQkUmPJt+bpxofNQLXoABg1Zz8rZHbpmY5yTDH13GJCBGK8aABiuo7K0Wwe/llffZPN6H6",
+    "jumpboxurl": "https://msreadylabcontent.blob.core.windows.net/task2/jumpbox.json",
+    "nextHopIP": "10.10.1.4",
+    "azfwRouteTableName": "[Concat(parameters('alias'),'-azroutetable')]",
+    "firewallName": "[Concat(parameters('alias'),'-azfw')]",
+    "publicIPName": "[Concat(parameters('alias'),'-azfw-pip')]",
+    "azureFirewallSubnetId": "[concat(variables('vnet1Ref'),'/subnets/','AzureFirewallSubnet')]",
+    "azureFirewallPublicIpId": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPName'))]",
+
+    "wafEnabled": true,
+    "wafMode": "Prevention",
+    "wafRuleSetType": "OWASP",
+    "wafRuleSetVersion": "3.0",
+
+    "appGatewaySubnetRef": "[concat(variables('vnet1Ref'),'/subnets/','DMZ')]",
+    "applicationGatewayName": "[Concat(parameters('alias'),'-appgw')]",
+    "appGwPublicIpName": "[Concat(parameters('alias'),'-appgw-pip')]",
+
+    "appGwPublicIPRef": "[resourceId('Microsoft.Network/publicIPAddresses',variables('appGwPublicIpName'))]",
+    "applicationGatewayID": "[resourceId('Microsoft.Network/applicationGateways',variables('applicationGatewayName'))]"
+
+
+
+
+
+
+
+  },
+  "resources": [
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('appGwPublicIpName')]",
+      "location": "[variables('vNet1').location]",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(variables('applicationGatewayName'),'01')]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "[variables('webvm').avname]",
+      "location": "[variables('webvm').location]",
+      "properties": {
+        "platformFaultDomainCount": 3,
+        "platformUpdateDomainCount": 3
+      }
+    },
+
+    {
+      "apiVersion": "2017-06-01",
+      "name": "[variables('applicationGatewayName')]",
+      "type": "Microsoft.Network/applicationGateways",
+      "location": "[variables('vNet1').location]",
+      "dependsOn": [
+
+        "[resourceId('Microsoft.Network/publicIPAddresses/', variables('appGwPublicIpName'))]"
+      ],
+      "properties": {
+        "sku": {
+          "name": "WAF_Medium",
+          "tier": "WAF",
+          "capacity": 1
+        },
+        "sslCertificates": [
+
+        ],
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGatewayIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[variables('appGatewaySubnetRef')]"
+              }
+            }
+          }
+        ],
+        "authenticationCertificates": [
+
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGatewayFrontendIP",
+            "properties": {
+              "PublicIPAddress": {
+                "id": "[variables('appGwPublicIPRef')]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "appGatewayFrontendPort80",
+            "properties": {
+              "Port": 80
+            }
+          }
+
+        ],
+        "backendAddressPools": [
+          {
+            "name": "appGatewayBackendPool",
+            "properties": {
+              "BackendAddresses": [
+                {
+                  "IpAddress": "[variables('webvm').iparray[0]]"
+                },
+                {
+                  "IpAddress": "[variables('webvm').iparray[1]]"
+                }
+              ]
+            }
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "appGatewayBackendHttpSettings",
+            "properties": {
+              "Port": 80,
+              "Protocol": "Http",
+              "CookieBasedAffinity": "Disabled"
+            }
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "appGatewayHttpListener",
+            "properties": {
+              "FrontendIPConfiguration": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
+              },
+              "FrontendPort": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/appGatewayFrontendPort80')]"
+              },
+              "Protocol": "Http",
+              "SslCertificate": null
+            }
+          }
+
+        ],
+        "requestRoutingRules": [
+          {
+            "Name": "HTTPRule",
+            "properties": {
+              "RuleType": "Basic",
+              "httpListener": {
+                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/appGatewayHttpListener')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/appGatewayBackendPool')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/appGatewayBackendHttpSettings')]"
+              }
+            }
+          }
+
+        ],
+        "webApplicationFirewallConfiguration": {
+          "enabled": "[variables('wafEnabled')]",
+          "firewallMode": "[variables('wafMode')]",
+          "ruleSetType": "[variables('wafRuleSetType')]",
+          "ruleSetVersion": "[variables('wafRuleSetVersion')]",
+          "disabledRuleGroups": []
+        }
+      }
+    },
+
+
+
+
+
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('webvm').storageaccount]",
+      "apiVersion": "2015-06-15",
+      "location": "[variables('webvm').location]",
+      "tags": {
+
+      },
+      "properties": {
+        "accountType": "[variables('webvm').storagetype]"
+      }
+    },
+
+    {
+      "apiVersion": "2016-04-30-preview",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('webvm').name,copyIndex(1))]",
+      "location": "[variables('webvm').location]",
+      "copy": {
+        "name": "webvmLoop",
+        "count": 2
+      },
+      "tags": {
+
+      },
+
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('webvm').storageaccount)]",
+        "webnicloop",
+
+        "[resourceId('Microsoft.Compute/availabilitysets', variables('webvm').avname)]"
+      ],
+      "properties": {
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitysets', variables('webvm').avname)]"
+
+        },
+
+        "hardwareProfile": {
+          "vmSize": "[variables('webvm').size]"
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('webvm').name,copyIndex(1))]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('webvm').imagePublisher]",
+            "offer": "[variables('webvm').imageOffer]",
+            "sku": "[variables('webvm').imagesku]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "osdisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('webvm').storageaccount), '2016-01-01').primaryEndpoints.blob, variables('webvm').name,copyIndex(1), '/', variables('webvm').name,copyIndex(1),'-osdisk', '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          },
+          "dataDisks": [
+            {
+              "vhd": {
+                "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('webvm').storageaccount), '2016-01-01').primaryEndpoints.blob,  variables('webvm').name,copyIndex(1), '/', variables('webvm').name,copyIndex(1),'-Datadisk01', '.vhd')]"
+              },
+              "name": "[concat(variables('webvm').name,copyIndex(1), '-datadisk1.vhd')]",
+              "caching": "None",
+              "createOption": "Empty",
+              "diskSizeGB": "[variables('webvm').datadisk1size]",
+              "lun": 0
+            }
+          ]
+        },
+
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('webvm').name,copyIndex(1),'-nic01'))]"
+            }
+          ]
+        }
+
+      },
+      "resources": [
+        {
+          "type": "extensions",
+          "name": "OMSExtension",
+          "apiVersion": "2015-06-15",
+          "location": "[variables('webvm').location]",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', variables('webvm').name,copyIndex(1))]"
+          ],
+          "properties": {
+            "publisher": "Microsoft.EnterpriseCloud.Monitoring",
+            "type": "MicrosoftMonitoringAgent",
+            "typeHandlerVersion": "1.0",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "workspaceId": "[parameters('omsworkspaceid')]"
+            },
+            "protectedSettings": {
+              "workspaceKey": "[parameters('omsworkspacekey')]"
+            }
+          }
+        },
+        {
+          "apiVersion": "2016-04-30-preview",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', variables('webvm').name,copyIndex(1))]"
+          ],
+          "location": "[variables('webvm').location]",
+          "name": "MicrosoftAntimalware",
+          "properties": {
+            "publisher": "Microsoft.Azure.Security",
+            "type": "IaaSAntimalware",
+            "typeHandlerVersion": "1.5",
+            "settings": {
+              "AntimalwareEnabled": "true",
+              "RealtimeProtectionEnabled": "true",
+              "ScheduledScanSettingsDay": "Saturday",
+              "ScheduledScanSettingsIsEnabled": "True",
+              "ScheduledScanSettingsScanType": "Full",
+              "ScheduledScanSettingsTime": "440"
+            }
+          },
+          "tags": {
+
+          },
+          "type": "extensions"
+        },
+        {
+          "name": "[concat(variables('webvm').name,copyIndex(1))]",
+          "type": "extensions",
+          "location": "[variables('webvm').location]",
+          "apiVersion": "2015-06-15",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', variables('webvm').name,copyIndex(1))]"
+          ],
+          "tags": {
+
+          },
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.19",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "modulesUrl": "[variables('webvm').dscurl]",
+              "configurationFunction": "[variables('webvm').dscfunction]",
+              "properties": {
+
+              }
+            },
+            "protectedSettings": {
+              "Items": {
+
+              }
+            }
+          }
+        }
+
+
+
+      ]
+
+    },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(concat(variables('webvm').name,copyIndex(1),'-nic01'))]",
+      "location": "[variables('webvm').location]",
+      "tags": {
+      },
+      "dependsOn": [
+
+
+      ],
+      "copy": {
+        "name": "webnicLoop",
+        "count": 2
+      },
+
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[variables('webvm').iparray[copyindex()]]",
+              "subnet": {
+                "id": "[variables('SubnetwebRef')]"
+              }
+
+
+            }
+          }
+        ]
+      }
+    }
+
+  ],
+
+  "outputs": {
+  }
 }
