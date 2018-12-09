@@ -114,7 +114,7 @@
       "imageOffer": "WindowsServer",
       "imagesku": "2016-Datacenter",
       "datadisk1size": "100",
-      "dscurl": "https://praroimages.blob.core.windows.net/windows-powershell-dsc/webserverdsc.ps1.zip",
+      "dscurl": "https://raw.githubusercontent.com/dmitriilezine/AzureSecBootcampNetworkLab2/master/AzureSecBootcampNetworkLab2/data/webserverdsc.ps1.zip",
       "dscfunction": "webserverdsc.ps1\\FourthCoffee"
     },
 
@@ -152,12 +152,6 @@
 
     "appGwPublicIPRef": "[resourceId('Microsoft.Network/publicIPAddresses',variables('appGwPublicIpName'))]",
     "applicationGatewayID": "[resourceId('Microsoft.Network/applicationGateways',variables('applicationGatewayName'))]"
-
-
-
-
-
-
 
   },
   "resources": [
@@ -302,9 +296,6 @@
         }
       }
     },
-
-
-
 
 
     {
